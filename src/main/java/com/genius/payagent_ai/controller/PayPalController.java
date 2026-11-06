@@ -8,10 +8,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
@@ -29,19 +26,31 @@ public class PayPalController {
     private final RestTemplate restTemplate = new RestTemplate();
 
     @PostMapping("/payout")
-    public ResponseEntity executePayout(@RequestBody Map<String, Object> payoutRequest){
+    public ResponseEntity<?> executePayout(@RequestBody Map<String, Object> payoutRequest){
         String accessToken = payPalAuthService.getAccessToken();
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.set("Authorization","Bearer "+accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authorization", "Bearer " + accessToken);
 
-        HttpEntity entity = new HttpEntity<>(payoutRequest,headers);
+        HttpEntity request = new HttpEntity<>(payoutRequest, headers);
 
         ResponseEntity response = restTemplate.postForEntity(
-                baseUrl + "/v1/payments/payouts", entity, Map.class
+                baseUrl + "/v1/payments/payouts", request, Map.class
         );
 
         return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
+    }
+
+
+    @GetMapping("/payout/{batchId}")
+    public ResponseEntity<?> checkPayoutStatus(@PathVariable String batchId){
+        try{
+            String accessToken = payPalAuthService.getAccessToken();
+            Map statusResponse = payPalAuthService.getPayoutStatus(batchId,accessToken);
+            return ResponseEntity.ok(statusResponse);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error",e.getMessage()));
+        }
     }
 }

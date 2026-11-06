@@ -1,10 +1,7 @@
 package com.genius.payagent_ai.service;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -28,24 +25,51 @@ public class PayPalAuthService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public String getAccessToken(){
-        String auth = clientId + ":" + clientSecret;
+
+        String cleanClientId = clientId != null ? clientId.trim() : "";
+        String cleanClientSecret = clientSecret != null ? clientSecret.trim() : "";
+
+        String auth = cleanClientId + ":" + cleanClientSecret;
         String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         headers.set("Authorization","Basic "+ encodedAuth);
 
-        HttpEntity<String> request =new HttpEntity<>("grant_type=client_credentials",headers);
+        org.springframework.util.MultiValueMap<String, String> body = new org.springframework.util.LinkedMultiValueMap<>();
+        body.add("grant_type", "client_credentials");
 
+        HttpEntity<org.springframework.util.MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
         ResponseEntity response = restTemplate.postForEntity(
                 baseUrl + "/v1/oauth2/token", request, Map.class
         );
 
+        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            Map responseBody = (Map) response.getBody(); // Cast or assign to a raw/parameterized Map variable
+            return (String) responseBody.get("access_token");
+        }
+        throw new RuntimeException("Failed to obtain Paypal Access Token");
+    }
+
+
+    public Map getPayoutStatus(String batchId, String accessToken){
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization","Bearer "+accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<String> request = new HttpEntity<>(headers);
+
+        ResponseEntity response = restTemplate.exchange(
+                baseUrl + "/v1/payments/payouts/" + batchId,
+                HttpMethod.GET,
+                request,
+                Map.class
+        );
+
         if(response.getStatusCode().is2xxSuccessful() && response.getBody() != null){
-            Map<?,?> body = (Map<?, ?>) response.getBody();
-            return (String) body.get("access_token");
+            return (Map) response.getBody();
         }
 
-        throw new RuntimeException("Failed to obtain Paypal Access Token");
+        throw new RuntimeException("Failed to fetch payout status from PayPal");
     }
 }
