@@ -1,5 +1,6 @@
 package com.genius.payagent_ai.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -31,6 +32,9 @@ public class PayoutBatch {
     @Column(name = "time_created")
     private Instant timeCreated;
 
-    @OneToMany(mappedBy = "payoutBatch", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "payoutBatch")
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<PayoutItem> items;
 }

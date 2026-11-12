@@ -8,70 +8,53 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class PayoutPersistenceService {
+
     private final PayoutBatchRepository batchRepository;
 
-    public PayoutPersistenceService(PayoutBatchRepository batchRepository){
+    public PayoutPersistenceService(PayoutBatchRepository batchRepository) {
         this.batchRepository = batchRepository;
     }
 
+    /**
+     * PayPal's create-payout response only returns the batch ID and status,
+     * so the rest is saved from our own request data plus the agent's audit result.
+     */
     @Transactional
-    public PayoutBatch savePayoutResponse(Map<String,Object> paypalResponse){
-        Map<String, Object> batchHeader = (Map<String, Object>) paypalResponse.get("batch_header");
-        Map<String, Object> amountMap = (Map<String, Object>) batchHeader.get("amount");
-
-        String batchId = (String) batchHeader.get("payout_batch_id");
-        String status = (String) batchHeader.get("batch_status");
-        String currency = (String) amountMap.get("currency");
-        BigDecimal totalAmount = new BigDecimal((String) amountMap.get("value"));
-        Instant timeCreated = Instant.parse((String) batchHeader.get("time_created"));
+    public PayoutBatch saveCreated(String batchId, String status, BigDecimal amount,
+                                   String receiver, String description, String senderItemId,
+                                   Map<String, Object> audit) {
 
         PayoutBatch batch = PayoutBatch.builder()
                 .payoutBatchId(batchId)
                 .batchStatus(status)
-                .currency(currency)
-                .totalAmount(totalAmount)
-                .timeCreated(timeCreated)
+                .currency("USD")
+                .totalAmount(amount)
+                .timeCreated(Instant.now())
                 .build();
 
-        List itemsList =(List) paypalResponse.get("items");
+        Object risk = audit.get("risk_score");
 
-        if(itemsList != null){
-            List<PayoutItem> items = (List<PayoutItem>) itemsList.stream().map(rawItem -> {
-                Map<String,Object> itemData = (Map<String, Object>) rawItem;
-                String payoutItemId = (String) itemData.get("payout_item_id");
-                String txStatus = (String) itemData.get("transaction_status");
-                String txId = (String) itemData.get("transaction_id");
+        PayoutItem item = PayoutItem.builder()
+                .payoutItemId(senderItemId)
+                .payoutBatch(batch)
+                .transactionStatus(status)
+                .receiverEmail(receiver)
+                .amount(amount)
+                .feeAmount(BigDecimal.ZERO)
+                .senderItemId(senderItemId)
+                .description(description)
+                .riskScore(risk instanceof Number n ? n.doubleValue() : null)
+                .approvalStatus(String.valueOf(audit.get("approval_status")))
+                .auditReason(String.valueOf(audit.get("audit_reason")))
+                .build();
 
-                Map<String, Object> payoutItemDetails = (Map<String, Object>) itemData.get("payout_item");
-                String receiver = (String) payoutItemDetails.get("receiver");
-
-                Map<String,Object> itemAmountMap = (Map<String, Object>) itemData.get("amount");
-                BigDecimal itemAmount = new BigDecimal((String) itemAmountMap.get("value"));
-
-                Map<String, Object> feeMap = (Map<String, Object>) itemData.get("payout_item_out");
-                BigDecimal feeAmount = feeMap != null ? new BigDecimal((String) feeMap.get("value")) : BigDecimal.ZERO;
-
-                String senderItemId = (String) payoutItemDetails.get("sender_item_id");
-
-                return PayoutItem.builder()
-                        .payoutItemId(payoutItemId)
-                        .payoutBatch(batch)
-                        .transactionStatus(txStatus)
-                        .transactionId(txId)
-                        .receiverEmail(receiver)
-                        .amount(itemAmount)
-                        .feeAmount(feeAmount)
-                        .senderItemId(senderItemId)
-                        .build();
-            }).collect(Collectors.toList());
-            batch.setItems(items);
-        }
+        batch.setItems(new ArrayList<>(List.of(item)));
 
         return batchRepository.save(batch);
     }

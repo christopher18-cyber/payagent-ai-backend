@@ -1,25 +1,18 @@
-# Stage 1: Build the application using Maven
-FROM eclipse-temurin:21-jdk-alpine AS build
+# ---- Build stage ----
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
+COPY pom.xml .
+RUN mvn -q dependency:go-offline
+COPY src ./src
+RUN mvn -q -DskipTests package
 
-# Copy Maven wrapper and build files
-mvnw pom.xml ./
-COPY .mvn .mvn
-COPY mvnw pom.xml ./
-COPY src src
-
-# Package the application (skip tests for faster cloud build)
-RUN ./mvnw clean package -DskipTests
-
-# Stage 2: Run the application
-FROM eclipse-temurin:21-jre-alpine
+# ---- Run stage ----
+FROM eclipse-temurin:17-jre
 WORKDIR /app
-
-# Copy the built JAR from the build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Expose the port your backend runs on
-EXPOSE 5000
+# Render's free tier has about 512 MB of memory, so keep the JVM small
+ENV JAVA_TOOL_OPTIONS="-Xmx350m -XX:+UseSerialGC"
 
-# Run the Spring Boot application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+EXPOSE 8080
+ENTRYPOINT ["sh", "-c", "java -Dserver.port=${PORT:-8080} -jar app.jar"]
