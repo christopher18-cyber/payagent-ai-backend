@@ -1,7 +1,8 @@
 package com.genius.payagent_ai.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.genius.payagent_ai.model.PayoutBatch;
 import com.genius.payagent_ai.model.PayoutItem;
 import com.genius.payagent_ai.model.SpendingRules;
